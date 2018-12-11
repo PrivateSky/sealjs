@@ -1,0 +1,12 @@
+{
+  "name": "poc_seal",
+  "version": "0.0.0",
+  "description": "Node.js Addons For SEAL",
+  "main": "addon.js",
+  "private": true,
+  "gypfile": true,
+  "dependencies": {
+    "node-addon-api": "*",
+    "bindings": "*"
+  }
+}
