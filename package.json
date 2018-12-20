@@ -1,12 +1,16 @@
 {
-  "name": "poc_seal",
+  "name": "sealjs",
   "version": "0.0.0",
-  "description": "Node.js Addons For SEAL",
+  "description": "Node.js Addon For Microsoft Simple Encrypted Arithmetic Library (Microsoft SEAL)",
   "main": "addon.js",
   "private": true,
   "gypfile": true,
   "dependencies": {
-    "node-addon-api": "*",
-    "bindings": "*"
+    "bindings": "~1.2.1",
+    "node-addon-api": "^1.0.0"
+  },
+  "scripts": {
+    "start": "node addon.js",
+    "demo": "node ./demo/demo.js"
   }
 }

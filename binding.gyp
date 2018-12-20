@@ -1,23 +1,24 @@
 {
   "targets": [
     {
-      "target_name": "addon",
+      "target_name": "nodeseal",
       "sources": [
         "addon.cc",
-        "example_bfv_basics_i.cc",
-        "sync.cc",
         "./seal/*.cpp",
-		"./seal/util/*.cpp"
+        "./seal/util/*.cpp",
+        "./demo/*.cc",
+        "./src/base64.cpp",
+        "./src/*.cc"
       ],
       'cflags!': [ '-fno-exceptions' ],
       'cflags_cc!': [ '-fno-exceptions' ],
       'include_dirs': [
         "<!@(node -p \"require('node-addon-api').include\")",
-        "."
+        "." ### "Additional Include Directories" for SEAL
         ],
       'defines': [
-        "_DISABLE_EXTENDED_ALIGNED_STORAGE"
-        #, "_CPPRTTI"
+        "_DISABLE_EXTENDED_ALIGNED_STORAGE" ### _ENABLE_EXTENDED_ALIGNED_STORAGE or _DISABLE_EXTENDED_ALIGNED_STORAGE
+        ###, "_CPPRTTI"
         ],
       'dependencies': ["<!(node -p \"require('node-addon-api').gyp\")"],
       'conditions': [
@@ -25,7 +26,7 @@
           "msvs_settings": {
             "VCCLCompilerTool": {
               "ExceptionHandling": 1
-              #, "RuntimeTypeInfo": "true"
+              ###, "RuntimeTypeInfo": "true"
             }
           }
         }],
