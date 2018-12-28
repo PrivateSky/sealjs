@@ -22,6 +22,7 @@ NAMESPACE_SEAL_WRAPPER_BEGIN
  *    seal::KeyGenerator
  *    seal::PublicKey                    - serializable
  *    seal::SecretKey                    - serializable
+ * 
  *    seal::Ciphertext                   - serializable
  *    seal::Encryptor
  *    seal::Decryptor
@@ -44,6 +45,9 @@ public:
 	HomomorphicContextWrapper(const Napi::CallbackInfo &info);
 
 private:
+	//no setter; use init ctor with EncryptionParameters
+	Napi::Value getEncryptionParameters(const Napi::CallbackInfo &info);
+
 	Napi::Value getPublicKey(const Napi::CallbackInfo &info);
 	Napi::Value setPublicKey(const Napi::CallbackInfo &info);
 
@@ -66,7 +70,7 @@ public:
 
 	std::shared_ptr<seal::IntegerEncoder>	m_IntegerEncoder;	//do we really need it?
 
-	std::shared_ptr<seal::KeyGenerator>		m_KeyGenerator;		//necessary only to generate the public & secret keys
+	std::shared_ptr<seal::KeyGenerator>		m_KeyGenerator;		//necessary only to generate the public & secret keys; //TODO: RelinKeys
 	std::shared_ptr<seal::PublicKey>		m_PublicKey;
 	std::shared_ptr<seal::SecretKey>		m_SecretKey;
 };

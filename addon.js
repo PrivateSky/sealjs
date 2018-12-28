@@ -20,13 +20,19 @@ const logOK = (strPrefix, valRet, valExpected) => log(strPrefix + valRet + " " +
  * 
  * How to use:
  * (1) Create a HomomorphicContext object:
- *           var hc = seal.generateHomomorficContext();
+ *           var hc1 = seal.generateHomomorficContext();
  *       or
- *           var hc = new seal.HomomorphicContext();
+ *           var hc2 = new seal.HomomorphicContext();
+ *       or
+ *           var hc3 = new seal.HomomorphicContext(2048, 'coeff_modulus_128', 1<<8);
+ *       or
+ *           var hc4 = new seal.HomomorphicContext(hc3.getEncryptionParameters());
  * 
  * (2) Use various methods of a HomomorphicContext instance:
  * 
  * GET/SET methods:
+ *   - getEncryptionParameters() - get the EncryptionParameters (serialized as String)
+ *                                 var params = hc.getEncryptionParameters();
  *   - getPublicKey() - get the PublicKey (serialized as String)
  *                      var publicKey = hc.getPublicKey();
  *   - setPublicKey() - set the PublicKey (serialized as String)
@@ -253,6 +259,68 @@ try {
     let valExpected = Math.pow(val2, 2);
     logOK("square  - SAME CONTEXT:  ", vRet, valExpected);
   }
+
+
+  ////////////////////////////////////////////////////////////////////////////////
+  //
+  //TEST getEncryptionParameters()
+  //
+
+  //SHOULD PASS
+  {
+    //let parms1 = hc.getEncryptionParameters();
+    let hc1 = seal.generateHomomorficContext(); //HomomorphicContext(2048, 'coeff_modulus_128', 1<<8) for 'BFV' scheme
+    let parms1 = hc1.getEncryptionParameters();
+    let hc2 = new seal.HomomorphicContext(parms1);
+    let parms2 = hc2.getEncryptionParameters();
+    let sameEP = (parms1 === parms2);
+    logOK("getEncryptionParameters - 2 CONTEXTS (default ctor): ", sameEP, true);
+  }
+  //SHOULD PASS
+  {
+    let hc1 = new seal.HomomorphicContext(8192, 'coeff_modulus_128', 40961); //'BFV' by default
+    let parms1 = hc1.getEncryptionParameters();
+    let hc2 = new seal.HomomorphicContext(parms1);
+    let parms2 = hc2.getEncryptionParameters();
+    let sameEP = (parms1 === parms2);
+    logOK("getEncryptionParameters - 2 CONTEXTS    (init ctor): ", sameEP, true);
+  }
+
+
+  ////////////////////////////////////////////////////////////////////////////////
+  //
+  //TEST ALL
+  //
+
+  log("");
+  //SHOULD PASS
+  {
+    let hc1 = new seal.HomomorphicContext(4096, 'coeff_modulus_192', Number(1 << 10));
+    let parms1 = hc1.getEncryptionParameters();
+    let pubKey1 = hc1.getPublicKey();
+    let secKey1 = hc1.getSecretKey();
+    let ciph1 = hc1.encrypt(val1);
+
+    let hc2 = new seal.HomomorphicContext(parms1);
+    let parms2 = hc2.getEncryptionParameters();
+    hc2.setPublicKey(pubKey1);                    //if params1 <> params2: "PublicKey data is invalid" exception
+    let ciph2 = hc2.encrypt(val2);
+
+    let hc3 = new seal.HomomorphicContext(parms2); //same as `parms1`
+    let c01 = hc3.negate(ciph1);
+    let c02 = hc3.add(c01, ciph2);
+    let c03 = hc3.multiply(c02, ciph2);
+    let c04 = hc3.square(ciph1);
+    let c05 = hc3.sub(c03, c04);
+
+    let hc4 = new seal.HomomorphicContext(parms1);
+    hc4.setSecretKey(secKey1);                    //if params1 <> params4: "SecretKey data is invalid" exception
+    let vRet = hc4.decrypt(c05);
+
+    let valExpected = ((-val1 + val2) * val2) - (val1 * val1); //59 = (-12 * -7) - 25
+    logOK("ALL sealjs API - 4 CONTEXTS HAVING THE SAME ENCRIPTION PARAMETERS: ", vRet, valExpected);
+  }
+  log("");
 
 }
 catch (unexpectedError) {

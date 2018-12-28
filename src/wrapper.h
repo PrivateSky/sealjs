@@ -17,11 +17,17 @@ bool isFloatValue(T d)
 */
 
 #define SEAL_WRAPPER_TRY        try
-#define SEAL_WRAPPER_CATCH_ALL  catch (const Napi::Error &e) { e.ThrowAsJavaScriptException(); }\
-                                catch (const std::exception &e)	{ Napi::Error::New(env, e.what()).ThrowAsJavaScriptException(); }\
-                                catch (...) { Napi::Error::New(env, "Unknown exception").ThrowAsJavaScriptException(); }
 
-#define SEAL_WRAPPER_CATCH_ALL_RETURN_UNDEFINED     SEAL_WRAPPER_CATCH_ALL; return env.Undefined();
+//you must return immediately after ThrowAsJavaScriptException() in any `catch` block:
+#define SEAL_WRAPPER_CATCH_ALL(RETVAL)  catch (const Napi::Error &e) { e.ThrowAsJavaScriptException(); return (RETVAL); }\
+                                        catch (const std::exception &e)	{ Napi::Error::New(env, e.what()).ThrowAsJavaScriptException(); return (RETVAL); }\
+                                        catch (...) { Napi::Error::New(env, "Unknown exception").ThrowAsJavaScriptException(); return (RETVAL); }
+//for ctor():
+#define SEAL_WRAPPER_CATCH_ALL_RETNONE  catch (const Napi::Error &e) { e.ThrowAsJavaScriptException(); return; }\
+                                        catch (const std::exception &e)	{ Napi::Error::New(env, e.what()).ThrowAsJavaScriptException(); return; }\
+                                        catch (...) { Napi::Error::New(env, "Unknown exception").ThrowAsJavaScriptException(); return; }
 
+//finally return RETVAL even if no exception has been thrown:
+#define SEAL_WRAPPER_CATCH_ALL_THEN_RETURN(RETVAL)  SEAL_WRAPPER_CATCH_ALL(RETVAL); return (RETVAL);
 
 #endif

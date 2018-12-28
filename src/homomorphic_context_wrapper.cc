@@ -1,6 +1,6 @@
 #include "homomorphic_context_wrapper.h"
 #include "wrapper_globals.h"
-//#include "base64.h"
+#include <set>
 
 NAMESPACE_SEAL_WRAPPER_BEGIN
 
@@ -27,6 +27,8 @@ Napi::Object HomomorphicContextWrapper::Init(Napi::Env env, Napi::Object exports
 	Napi::HandleScope scope(env);
 
 	Napi::Function func = DefineClass(env, "HomomorphicContextWrapper", {
+		InstanceMethod("getEncryptionParameters", &HomomorphicContextWrapper::getEncryptionParameters), //no setter
+
 		InstanceMethod("getPublicKey", &HomomorphicContextWrapper::getPublicKey),
 		InstanceMethod("setPublicKey", &HomomorphicContextWrapper::setPublicKey),
 		InstanceMethod("getSecretKey", &HomomorphicContextWrapper::getSecretKey),
@@ -69,61 +71,113 @@ HomomorphicContextWrapper::HomomorphicContextWrapper(const Napi::CallbackInfo &i
 	Napi::Env env = info.Env();
 	Napi::HandleScope scope(env);
 
-	auto infoLength = static_cast<unsigned int>(info.Length());
-	switch (infoLength)
+	static std::set<size_t> s_setPMD{1024, 2048, 4096, 8192, 16384, 32768}; //available values for poly_modulus_degree
+
+	SEAL_WRAPPER_TRY
 	{
-	case 0U: //no EncryptionParameters
-	{
-		SEAL_WRAPPER_TRY
+
+		auto infoLength = static_cast<unsigned int>(info.Length());
+		switch (infoLength)
+		{
+		case 0U: //no EncryptionParameters
 		{
 			m_EncryptionParameters = std::make_shared<seal::EncryptionParameters>(seal::scheme_type::BFV);
 			m_EncryptionParameters->set_poly_modulus_degree(2048);
 			m_EncryptionParameters->set_coeff_modulus(seal::coeff_modulus_128(2048));
 			m_EncryptionParameters->set_plain_modulus(1 << 8);
 		}
-		SEAL_WRAPPER_CATCH_ALL
 		break;
-	}
 
-	case 1U: //EncryptionParameters provided as String
-	{
-		if (!info[0].IsString()) //TODO: validator
-			Napi::TypeError::New(env, "String expected").ThrowAsJavaScriptException();
-
-		SEAL_WRAPPER_TRY
+		case 1U: //EncryptionParameters serialized as String
 		{
+			if (!info[0].IsString()) //TODO: validator
+				// { Napi::TypeError::New(env, "String expected").ThrowAsJavaScriptException(); return; } //MUST RETURN!!!
+				throw Napi::TypeError::New(env, "String expected");
+
 			std::istringstream iss(std::move(Convert(info[0].As<Napi::String>())));
 			m_EncryptionParameters = std::make_shared<seal::EncryptionParameters>(seal::EncryptionParameters::Load(iss));
 		}
-		SEAL_WRAPPER_CATCH_ALL
 		break;
-	}
 
-	default:
-		Napi::TypeError::New(env, "Wrong arguments number").ThrowAsJavaScriptException();
-	} //end switch (infoLength)
+		case 3U: //Init parameters for EncryptionParameters in "BFV" scheme: poly_modulus_degree, coeff_modulus and plain_modulus
+		{
+			if (!info[0].IsNumber() || !info[1].IsString() || !info[2].IsNumber()) //TODO: validator
+				throw Napi::TypeError::New(env, "(Number, String, Number) expected for BFV scheme");
 
-	SEAL_WRAPPER_TRY
-	{
+			//scheme_type: 'BFV' by default
+			m_EncryptionParameters = std::make_shared<seal::EncryptionParameters>(seal::scheme_type::BFV);
+
+			//poly_modulus_degree
+			const auto poly_modulus_degree = static_cast<size_t>(info[0].As<Napi::Number>().Uint32Value());
+			if (s_setPMD.find(poly_modulus_degree) != s_setPMD.end())
+				m_EncryptionParameters->set_poly_modulus_degree(poly_modulus_degree);
+			else
+				throw Napi::TypeError::New(env, "1st argument: 2 ^ (10..15) expected");
+
+			//coeff_modulus
+			auto strCoeffModulus = (std::string)info[1].As<Napi::String>();
+			std::transform(strCoeffModulus.begin(), strCoeffModulus.end(), strCoeffModulus.begin(), ::tolower); //lowercase
+			decltype(seal::coeff_modulus_128) *fnCoeffModulus;
+
+			if (strCoeffModulus.compare("coeff_modulus_128") == 0)
+				fnCoeffModulus = seal::coeff_modulus_128;
+			else
+			if (strCoeffModulus.compare("coeff_modulus_192") == 0)
+				fnCoeffModulus = seal::coeff_modulus_192;
+			else
+			if (strCoeffModulus.compare("coeff_modulus_256") == 0)
+				fnCoeffModulus = seal::coeff_modulus_256;
+			else
+				throw Napi::TypeError::New(env, "2nd argument: 'coeff_modulus_128', 'coeff_modulus_192' or 'coeff_modulus_256' expected");
+			m_EncryptionParameters->set_coeff_modulus(fnCoeffModulus(poly_modulus_degree));
+
+			//plain_modulus
+			const auto plain_modulus = info[2].As<Napi::Number>().Int64Value(); //Number::Uint64Value() -- no such a method?
+			m_EncryptionParameters->set_plain_modulus(plain_modulus);
+		}
+		break;
+
+		default:
+			throw Napi::TypeError::New(env, "Wrong arguments number");
+		} //end switch (infoLength)
+
 		m_SEALContextPtr = std::make_shared<decltype(m_SEALContextPtr)::element_type>(seal::SEALContext::Create(*m_EncryptionParameters));
-	}
-	SEAL_WRAPPER_CATCH_ALL
-	if (!m_SEALContextPtr) //TODO: validator
-		Napi::Error::New(env, "Cannot initialize THE cryptographic context for homomorphic encryption").ThrowAsJavaScriptException();
-	if (!(*m_SEALContextPtr)->parameters_set())
-		Napi::Error::New(env, "Invalid encryption parameters").ThrowAsJavaScriptException();
+		if (!m_SEALContextPtr) //TODO: validator
+			throw Napi::Error::New(env, "Cannot initialize THE cryptographic context for homomorphic encryption");
+		if (!(*m_SEALContextPtr)->parameters_set())
+			throw Napi::Error::New(env, "Invalid encryption parameters");
 
-	SEAL_WRAPPER_TRY
-	{
+		//!!! IMPORTANT: IntegerEncoder AND FractionalEncoder ARE NOT AVAILABLE IN 'CKKS' SCHEME !!!
 		m_IntegerEncoder = std::make_shared<seal::IntegerEncoder>(m_EncryptionParameters->plain_modulus());
+
 		m_KeyGenerator = std::make_shared<seal::KeyGenerator>(*m_SEALContextPtr);
 		m_PublicKey = std::make_shared<seal::PublicKey>(m_KeyGenerator->public_key());
 		m_SecretKey = std::make_shared<seal::SecretKey>(m_KeyGenerator->secret_key());
 	}
-	SEAL_WRAPPER_CATCH_ALL
+	SEAL_WRAPPER_CATCH_ALL_RETNONE; //ctor returns nothing
 }
 
+/*******************************************************************************
+ * HomomorphicContextWrapper::getEncryptionParameters
+ * Returns: EncryptionParameters as JS String
+ *******************************************************************************/
+Napi::Value HomomorphicContextWrapper::getEncryptionParameters(const Napi::CallbackInfo &info)
+{
+	Napi::Env env = info.Env();
+	SEAL_WRAPPER_TRY
+	{
+		if (info.Length() != 0) //TODO: validator
+			throw Napi::TypeError::New(env, "No arguments expected");
 
+		if (!m_EncryptionParameters) //TODO: validator
+			throw Napi::Error::New(env, "No EncryptionParameters have been set yet");
+
+		std::ostringstream oss(std::ios_base::out | std::ios_base::binary);
+		seal::EncryptionParameters::Save(*m_EncryptionParameters, oss);
+		return Convert(env, oss);
+	}
+	SEAL_WRAPPER_CATCH_ALL_THEN_RETURN(env.Undefined());
+}
 
 /*******************************************************************************
  * HomomorphicContextWrapper::getPublicKey
@@ -132,20 +186,19 @@ HomomorphicContextWrapper::HomomorphicContextWrapper(const Napi::CallbackInfo &i
 Napi::Value HomomorphicContextWrapper::getPublicKey(const Napi::CallbackInfo &info)
 {
 	Napi::Env env = info.Env();
-
-	if (info.Length() != 0) //TODO: validator
-		Napi::TypeError::New(env, "No arguments expected").ThrowAsJavaScriptException();
-
-	if (!m_PublicKey) //TODO: validator
-		Napi::Error::New(env, "No public key has been set yet").ThrowAsJavaScriptException();
-
 	SEAL_WRAPPER_TRY
 	{
+		if (info.Length() != 0) //TODO: validator
+			throw Napi::TypeError::New(env, "No arguments expected");
+
+		if (!m_PublicKey) //TODO: validator
+			throw Napi::Error::New(env, "No public key has been set yet");
+
 		std::ostringstream oss(std::ios_base::out | std::ios_base::binary);
 		m_PublicKey->save(oss);
 		return Convert(env, oss);
 	}
-	SEAL_WRAPPER_CATCH_ALL_RETURN_UNDEFINED
+	SEAL_WRAPPER_CATCH_ALL_THEN_RETURN(env.Undefined());
 }
 /*******************************************************************************
  * HomomorphicContextWrapper::setPublicKey
@@ -155,16 +208,15 @@ Napi::Value HomomorphicContextWrapper::getPublicKey(const Napi::CallbackInfo &in
 Napi::Value HomomorphicContextWrapper::setPublicKey(const Napi::CallbackInfo &info)
 {
 	Napi::Env env = info.Env();
-
-	if (info.Length() != 1 || !info[0].IsString())
-		Napi::TypeError::New(env, "String expected").ThrowAsJavaScriptException();
-
 	SEAL_WRAPPER_TRY
 	{
+		if (info.Length() != 1 || !info[0].IsString())
+			throw Napi::TypeError::New(env, "String expected");
+
 		std::istringstream iss(std::move(Convert(info[0].As<Napi::String>())));
 		m_PublicKey->load(*m_SEALContextPtr, iss);
 	}
-	SEAL_WRAPPER_CATCH_ALL_RETURN_UNDEFINED
+	SEAL_WRAPPER_CATCH_ALL_THEN_RETURN(env.Undefined());
 }
 
 /*******************************************************************************
@@ -174,20 +226,19 @@ Napi::Value HomomorphicContextWrapper::setPublicKey(const Napi::CallbackInfo &in
 Napi::Value HomomorphicContextWrapper::getSecretKey(const Napi::CallbackInfo &info)
 {
 	Napi::Env env = info.Env();
-
-	if (info.Length() != 0) //TODO: validator
-		Napi::TypeError::New(env, "No arguments expected").ThrowAsJavaScriptException();
-
-	if (!m_SecretKey) //TODO: validator
-		Napi::Error::New(env, "No public key has been set yet").ThrowAsJavaScriptException();
-
 	SEAL_WRAPPER_TRY
 	{
+		if (info.Length() != 0) //TODO: validator
+			throw Napi::TypeError::New(env, "No arguments expected");
+
+		if (!m_SecretKey) //TODO: validator
+			throw Napi::Error::New(env, "No public key has been set yet");
+
 		std::ostringstream oss(std::ios_base::out | std::ios_base::binary);
 		m_SecretKey->save(oss);
 		return Convert(env, oss);
 	}
-	SEAL_WRAPPER_CATCH_ALL_RETURN_UNDEFINED
+	SEAL_WRAPPER_CATCH_ALL_THEN_RETURN(env.Undefined());
 }
 /*******************************************************************************
  * HomomorphicContextWrapper::setSecretKey
@@ -197,16 +248,15 @@ Napi::Value HomomorphicContextWrapper::getSecretKey(const Napi::CallbackInfo &in
 Napi::Value HomomorphicContextWrapper::setSecretKey(const Napi::CallbackInfo &info)
 {
 	Napi::Env env = info.Env();
-
-	if (info.Length() != 1 || !info[0].IsString())
-		Napi::TypeError::New(env, "String expected").ThrowAsJavaScriptException();
-
 	SEAL_WRAPPER_TRY
 	{
+		if (info.Length() != 1 || !info[0].IsString())
+			throw Napi::TypeError::New(env, "String expected");
+
 		std::istringstream iss(std::move(Convert(info[0].As<Napi::String>())));
 		m_SecretKey->load(*m_SEALContextPtr, iss);
 	}
-	SEAL_WRAPPER_CATCH_ALL_RETURN_UNDEFINED
+	SEAL_WRAPPER_CATCH_ALL_THEN_RETURN(env.Undefined());
 }
 
 /*******************************************************************************
@@ -217,14 +267,13 @@ Napi::Value HomomorphicContextWrapper::setSecretKey(const Napi::CallbackInfo &in
 Napi::Value HomomorphicContextWrapper::encrypt(const Napi::CallbackInfo &info)
 {
 	Napi::Env env = info.Env();
-
-	if (info.Length() != 1 || !info[0].IsNumber())
-		Napi::TypeError::New(env, "Number expected").ThrowAsJavaScriptException();
-
 	SEAL_WRAPPER_TRY
 	{
+		if (info.Length() != 1 || !info[0].IsNumber())
+			throw Napi::TypeError::New(env, "Number expected");
+
 		Napi::Number objJS = info[0].As<Napi::Number>();
-		const auto inputValue = objJS.Int32Value();				//??? objJS.DoubleValue()
+		const auto inputValue = objJS.Int32Value(); //??? objJS.DoubleValue()
 		const auto plaintext = m_IntegerEncoder->encode(inputValue);
 		seal::Ciphertext ciphertext;
 		seal::Encryptor encryptor(*m_SEALContextPtr, *m_PublicKey);
@@ -234,9 +283,8 @@ Napi::Value HomomorphicContextWrapper::encrypt(const Napi::CallbackInfo &info)
 		ciphertext.save(oss);
 		return Convert(env, oss);
 	}
-	SEAL_WRAPPER_CATCH_ALL_RETURN_UNDEFINED
+	SEAL_WRAPPER_CATCH_ALL_THEN_RETURN(env.Undefined());
 }
-
 /*******************************************************************************
  * HomomorphicContextWrapper::decrypt
  * info[0]: Ciphertext as JS String (base 64 encoded)
@@ -245,12 +293,11 @@ Napi::Value HomomorphicContextWrapper::encrypt(const Napi::CallbackInfo &info)
 Napi::Value HomomorphicContextWrapper::decrypt(const Napi::CallbackInfo &info)
 {
 	Napi::Env env = info.Env();
-
-	if (info.Length() != 1 || !info[0].IsString())
-		Napi::TypeError::New(env, "String expected").ThrowAsJavaScriptException();
-
 	SEAL_WRAPPER_TRY
 	{
+		if (info.Length() != 1 || !info[0].IsString())
+			throw Napi::TypeError::New(env, "String expected");
+
 		seal::Ciphertext ciphertext;
 		std::istringstream iss(std::move(Convert(info[0].As<Napi::String>())));
 		ciphertext.load(*m_SEALContextPtr, iss); //unsafe_load()
@@ -262,10 +309,8 @@ Napi::Value HomomorphicContextWrapper::decrypt(const Napi::CallbackInfo &info)
 		const auto outputValue = m_IntegerEncoder->decode_int32(plaintext);
 		return Napi::Number::New(env, outputValue);
 	}
-	SEAL_WRAPPER_CATCH_ALL_RETURN_UNDEFINED
+	SEAL_WRAPPER_CATCH_ALL_THEN_RETURN(env.Undefined());
 }
-
-
 
 /*******************************************************************************
  * HomomorphicContextWrapper::negate
@@ -275,12 +320,11 @@ Napi::Value HomomorphicContextWrapper::decrypt(const Napi::CallbackInfo &info)
 Napi::Value HomomorphicContextWrapper::negate(const Napi::CallbackInfo &info)
 {
 	Napi::Env env = info.Env();
-
-	if (info.Length() != 1 || !info[0].IsString())
-		Napi::TypeError::New(env, "String expected - 1 parameter").ThrowAsJavaScriptException();
-
 	SEAL_WRAPPER_TRY
 	{
+		if (info.Length() != 1 || !info[0].IsString())
+			throw Napi::TypeError::New(env, "String expected - 1 parameter");
+
 		seal::Ciphertext ciphertext1, ciphertextResult;
 		std::istringstream iss1(std::move(Convert(info[0].As<Napi::String>())));
 		ciphertext1.load(*m_SEALContextPtr, iss1);
@@ -292,7 +336,7 @@ Napi::Value HomomorphicContextWrapper::negate(const Napi::CallbackInfo &info)
 		ciphertextResult.save(oss);
 		return Convert(env, oss);
 	}
-	SEAL_WRAPPER_CATCH_ALL_RETURN_UNDEFINED
+	SEAL_WRAPPER_CATCH_ALL_THEN_RETURN(env.Undefined());
 }
 
 /*******************************************************************************
@@ -304,12 +348,11 @@ Napi::Value HomomorphicContextWrapper::negate(const Napi::CallbackInfo &info)
 Napi::Value HomomorphicContextWrapper::add(const Napi::CallbackInfo &info)
 {
 	Napi::Env env = info.Env();
-
-	if (info.Length() != 2 || !info[0].IsString() || !info[1].IsString())
-		Napi::TypeError::New(env, "String expected - 2 parameters").ThrowAsJavaScriptException();
-
 	SEAL_WRAPPER_TRY
 	{
+		if (info.Length() != 2 || !info[0].IsString() || !info[1].IsString())
+			throw Napi::TypeError::New(env, "String expected - 2 parameters");
+
 		seal::Ciphertext ciphertext1, ciphertext2, ciphertextResult;
 		std::istringstream iss1(std::move(Convert(info[0].As<Napi::String>())));
 		std::istringstream iss2(std::move(Convert(info[1].As<Napi::String>())));
@@ -323,7 +366,7 @@ Napi::Value HomomorphicContextWrapper::add(const Napi::CallbackInfo &info)
 		ciphertextResult.save(oss);
 		return Convert(env, oss);
 	}
-	SEAL_WRAPPER_CATCH_ALL_RETURN_UNDEFINED
+	SEAL_WRAPPER_CATCH_ALL_THEN_RETURN(env.Undefined());
 }
 
 /*******************************************************************************
@@ -335,12 +378,11 @@ Napi::Value HomomorphicContextWrapper::add(const Napi::CallbackInfo &info)
 Napi::Value HomomorphicContextWrapper::sub(const Napi::CallbackInfo &info)
 {
 	Napi::Env env = info.Env();
-
-	if (info.Length() != 2 || !info[0].IsString() || !info[1].IsString())
-		Napi::TypeError::New(env, "String expected - 2 parameters").ThrowAsJavaScriptException();
-
 	SEAL_WRAPPER_TRY
 	{
+		if (info.Length() != 2 || !info[0].IsString() || !info[1].IsString())
+			throw Napi::TypeError::New(env, "String expected - 2 parameters");
+
 		seal::Ciphertext ciphertext1, ciphertext2, ciphertextResult;
 		std::istringstream iss1(std::move(Convert(info[0].As<Napi::String>())));
 		std::istringstream iss2(std::move(Convert(info[1].As<Napi::String>())));
@@ -354,7 +396,7 @@ Napi::Value HomomorphicContextWrapper::sub(const Napi::CallbackInfo &info)
 		ciphertextResult.save(oss);
 		return Convert(env, oss);
 	}
-	SEAL_WRAPPER_CATCH_ALL_RETURN_UNDEFINED
+	SEAL_WRAPPER_CATCH_ALL_THEN_RETURN(env.Undefined());
 }
 
 /*******************************************************************************
@@ -366,12 +408,11 @@ Napi::Value HomomorphicContextWrapper::sub(const Napi::CallbackInfo &info)
 Napi::Value HomomorphicContextWrapper::multiply(const Napi::CallbackInfo &info)
 {
 	Napi::Env env = info.Env();
-
-	if (info.Length() != 2 || !info[0].IsString() || !info[1].IsString())
-		Napi::TypeError::New(env, "String expected - 2 parameters").ThrowAsJavaScriptException();
-
 	SEAL_WRAPPER_TRY
 	{
+		if (info.Length() != 2 || !info[0].IsString() || !info[1].IsString())
+			throw Napi::TypeError::New(env, "String expected - 2 parameters");
+
 		seal::Ciphertext ciphertext1, ciphertext2, ciphertextResult;
 		std::istringstream iss1(std::move(Convert(info[0].As<Napi::String>())));
 		std::istringstream iss2(std::move(Convert(info[1].As<Napi::String>())));
@@ -385,7 +426,7 @@ Napi::Value HomomorphicContextWrapper::multiply(const Napi::CallbackInfo &info)
 		ciphertextResult.save(oss);
 		return Convert(env, oss);
 	}
-	SEAL_WRAPPER_CATCH_ALL_RETURN_UNDEFINED
+	SEAL_WRAPPER_CATCH_ALL_THEN_RETURN(env.Undefined());
 }
 
 /*******************************************************************************
@@ -396,12 +437,11 @@ Napi::Value HomomorphicContextWrapper::multiply(const Napi::CallbackInfo &info)
 Napi::Value HomomorphicContextWrapper::square(const Napi::CallbackInfo &info)
 {
 	Napi::Env env = info.Env();
-
-	if (info.Length() != 1 || !info[0].IsString())
-		Napi::TypeError::New(env, "String expected - 1 parameter").ThrowAsJavaScriptException();
-
 	SEAL_WRAPPER_TRY
 	{
+		if (info.Length() != 1 || !info[0].IsString())
+			throw Napi::TypeError::New(env, "String expected - 1 parameter");
+
 		seal::Ciphertext ciphertext1, ciphertextResult;
 		std::istringstream iss1(std::move(Convert(info[0].As<Napi::String>())));
 		ciphertext1.load(*m_SEALContextPtr, iss1);
@@ -413,8 +453,7 @@ Napi::Value HomomorphicContextWrapper::square(const Napi::CallbackInfo &info)
 		ciphertextResult.save(oss);
 		return Convert(env, oss);
 	}
-	SEAL_WRAPPER_CATCH_ALL_RETURN_UNDEFINED
+	SEAL_WRAPPER_CATCH_ALL_THEN_RETURN(env.Undefined());
 }
-
 
 NAMESPACE_SEAL_WRAPPER_END
