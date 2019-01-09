@@ -59,3 +59,10 @@ Homomorphic arithmetic:
 
 ## Notes
 The SEAL's `EncryptionParameters`, `PublicKey`, `SecretKey` and `Ciphertext` objects are serialized to/from the JS environment as Base64 encoded strings.
+
+## Portability
+We adapted the module to build on both Windows 10 and Ubuntu 18.04 LTS (bionic), by adjusting:
+- build parameters - `binding.gyp`
+- SEAL macrodefinitions - `seal/util/config.h`
+
+to a common code; please inspect `config.h` for the list of enabled / disabled SEAL macros.
