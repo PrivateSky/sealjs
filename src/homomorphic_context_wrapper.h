@@ -56,7 +56,7 @@ private:
 
 	Napi::Value encrypt(const Napi::CallbackInfo &info);	//ACTUALLY: Plaintext IntegerEncoder::encode(int32_t)
 	Napi::Value decrypt(const Napi::CallbackInfo &info);	//ACTUALLY: int32_t IntegerEncoder::decode_int32(Plaintext)
-private:
+
 	Napi::Value negate(const Napi::CallbackInfo &info);
 	Napi::Value add(const Napi::CallbackInfo &info);
 	Napi::Value sub(const Napi::CallbackInfo &info);
@@ -64,7 +64,7 @@ private:
 	Napi::Value square(const Napi::CallbackInfo &info);			//relinearization can apply here
 	//Napi::Value exponentiate(const Napi::CallbackInfo &info);	//we need explicit relinearization here!
 
-public:
+private:
 	std::shared_ptr<seal::EncryptionParameters>			m_EncryptionParameters;
 	std::shared_ptr<std::shared_ptr<seal::SEALContext>>	m_SEALContextPtr;		//THE Cryptographic Context
 

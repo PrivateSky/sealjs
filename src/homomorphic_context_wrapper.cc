@@ -72,6 +72,11 @@ HomomorphicContextWrapper::HomomorphicContextWrapper(const Napi::CallbackInfo &i
 	Napi::HandleScope scope(env);
 
 	static std::set<size_t> s_setPMD{1024, 2048, 4096, 8192, 16384, 32768}; //available values for poly_modulus_degree
+	static std::map<std::string, std::vector<seal::SmallModulus> (*)(size_t)> s_mapCM{
+		{"coeff_modulus_128", seal::coeff_modulus_128},
+		{"coeff_modulus_192", seal::coeff_modulus_192},
+		{"coeff_modulus_256", seal::coeff_modulus_256},
+	};
 
 	SEAL_WRAPPER_TRY
 	{
@@ -104,35 +109,21 @@ HomomorphicContextWrapper::HomomorphicContextWrapper(const Napi::CallbackInfo &i
 			if (!info[0].IsNumber() || !info[1].IsString() || !info[2].IsNumber()) //TODO: validator
 				throw Napi::TypeError::New(env, "(Number, String, Number) expected for BFV scheme");
 
+			const auto poly_modulus_degree = static_cast<size_t>(info[0].As<Napi::Number>().Uint32Value());
+			auto strCoeffModulus = (std::string)info[1].As<Napi::String>();
+			const auto plain_modulus = info[2].As<Napi::Number>().Int64Value(); //Number::Uint64Value() -- no such a method?
+
+			if (s_setPMD.find(poly_modulus_degree) == s_setPMD.end())
+				throw Napi::RangeError::New(env, "1st argument should be one of: 2^10, 2^11, ..., 2^15");
+
+			std::transform(strCoeffModulus.begin(), strCoeffModulus.end(), strCoeffModulus.begin(), ::tolower); //lowercase
+			if (s_mapCM.find(strCoeffModulus) == s_mapCM.end())
+				throw Napi::RangeError::New(env, "2nd argument should be one of: 'coeff_modulus_128', 'coeff_modulus_192' or 'coeff_modulus_256'");
+
 			//scheme_type: 'BFV' by default
 			m_EncryptionParameters = std::make_shared<seal::EncryptionParameters>(seal::scheme_type::BFV);
-
-			//poly_modulus_degree
-			const auto poly_modulus_degree = static_cast<size_t>(info[0].As<Napi::Number>().Uint32Value());
-			if (s_setPMD.find(poly_modulus_degree) != s_setPMD.end())
-				m_EncryptionParameters->set_poly_modulus_degree(poly_modulus_degree);
-			else
-				throw Napi::TypeError::New(env, "1st argument: 2 ^ (10..15) expected");
-
-			//coeff_modulus
-			auto strCoeffModulus = (std::string)info[1].As<Napi::String>();
-			std::transform(strCoeffModulus.begin(), strCoeffModulus.end(), strCoeffModulus.begin(), ::tolower); //lowercase
-			decltype(seal::coeff_modulus_128) *fnCoeffModulus;
-
-			if (strCoeffModulus.compare("coeff_modulus_128") == 0)
-				fnCoeffModulus = seal::coeff_modulus_128;
-			else
-			if (strCoeffModulus.compare("coeff_modulus_192") == 0)
-				fnCoeffModulus = seal::coeff_modulus_192;
-			else
-			if (strCoeffModulus.compare("coeff_modulus_256") == 0)
-				fnCoeffModulus = seal::coeff_modulus_256;
-			else
-				throw Napi::TypeError::New(env, "2nd argument: 'coeff_modulus_128', 'coeff_modulus_192' or 'coeff_modulus_256' expected");
-			m_EncryptionParameters->set_coeff_modulus(fnCoeffModulus(poly_modulus_degree));
-
-			//plain_modulus
-			const auto plain_modulus = info[2].As<Napi::Number>().Int64Value(); //Number::Uint64Value() -- no such a method?
+			m_EncryptionParameters->set_poly_modulus_degree(poly_modulus_degree);
+			m_EncryptionParameters->set_coeff_modulus(s_mapCM[strCoeffModulus](poly_modulus_degree));
 			m_EncryptionParameters->set_plain_modulus(plain_modulus);
 		}
 		break;
@@ -232,7 +223,7 @@ Napi::Value HomomorphicContextWrapper::getSecretKey(const Napi::CallbackInfo &in
 			throw Napi::TypeError::New(env, "No arguments expected");
 
 		if (!m_SecretKey) //TODO: validator
-			throw Napi::Error::New(env, "No public key has been set yet");
+			throw Napi::Error::New(env, "No secret key has been set yet");
 
 		std::ostringstream oss(std::ios_base::out | std::ios_base::binary);
 		m_SecretKey->save(oss);
