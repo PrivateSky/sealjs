@@ -1,3 +1,9 @@
+**Branches**:
+- `master`: C++ addon for NodeJS, using [node-addon-api](https://github.com/nodejs/node-addon-api) - the OOP version of N-API
+- `seal-wasm-external`: JavaScript (glue code) and WebAssembly files, using [Emscripten](https://kripken.github.io/emscripten-site/index.html)
+- `seal-wasm-embedded`: JavaScript with embedded WebAssembly, using Emscripten
+***
+
 # sealjs
 Node.js port of SEAL C++ package released by Microsoft and containing homomorphic encryption primitives
 
