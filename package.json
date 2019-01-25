@@ -1,16 +1,19 @@
 {
-  "name": "sealjs",
-  "version": "0.0.0",
-  "description": "Node.js Addon For Microsoft Simple Encrypted Arithmetic Library (Microsoft SEAL)",
-  "main": "addon.js",
+  "name": "seal-wasm-external",
+  "description": "WebAssembly port of Microsoft SEAL library using EmSDK. The build generates separate seal.js and seal.wasm files.",
+  "version": "1.0.0",
+  "main": "index.js",
+  "author": "Ciprian Sava",
   "private": true,
-  "gypfile": true,
-  "dependencies": {
-    "bindings": "~1.2.1",
-    "node-addon-api": "^1.0.0"
-  },
   "scripts": {
-    "start": "node addon.js",
-    "demo": "node ./demo/demo.js"
+    "ub": "sh ./_build.sh",
+    "ur": "sh ./_run.sh && http-server .",
+    "ubuntu": "npm run ub && npm run ur",
+    "wb": "_build.bat",
+    "wr": "_run.bat",
+    "windows": "npm run wb && npm run wr"
+  },
+  "dependencies": {
+    "http-server": "^0.10.0"
   }
 }

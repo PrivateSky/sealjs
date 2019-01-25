@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<meta http-equiv="X-UA-Compatible" content="ie=edge">
+	<title>SEAL WebAssembly Demo</title>
+	<style>
+	#seal_result {
+	  font-family: Arial, Helvetica, sans-serif;
+	  font-size: 10px;
+	}
+</style>
+</head>
+
+<body>
+	<button id="btnSeal" onclick="handler_onclick_btnSeal();">Start SEAL demo</button>
+	<div id="seal_result"></div>
+	
+	<script src="my_seal_test.js"></script>
+	<script>
+		console.log = text => document.getElementById('seal_result').innerHTML += "<br />" + text;
+		
+		var wasm_mySealTest;
+		
+		function handler_onclick_btnSeal() {
+			if (wasm_mySealTest) {
+				document.getElementById('seal_result').innerHTML += "<hr />Computing...<br />";
+				setTimeout(function(){
+					const _start = Date.now();
+					wasm_mySealTest(); //<== execute SEAL homomorphic encryption demo
+					const _millis = Date.now() - _start;
+					document.getElementById('seal_result').innerHTML += "<br />... done (" + _millis/1000.0 + " seconds)";
+				}, 100);
+			}
+			else {
+				document.getElementById('seal_result').innerHTML += "<br />WASM module not loaded yet... (please press the button again)";
+			}
+		}
+/*
+		function handler_onclick_btnSeal() {
+			if (wasm_mySealTest) {
+				const _start = Date.now();
+				new Promise( (resolve, reject) => { //UNUSED `reject`
+					wasm_mySealTest(); //<== execute
+					resolve();
+				})
+				.then( _ => { //`resolve`
+					const _millis = Date.now() - _start;
+					document.getElementById('seal_result').innerHTML += "<br />SEAL calculation done (" + _millis/1000.0 + " seconds)";
+				});
+			}
+			else {
+				document.getElementById('seal_result').innerHTML += "<br />WASM module not loaded yet... (please press the button again)";
+			}
+		}
+*/
+
+		/// `my_seal_test.js` contains my very own code for testing - mySealTest()
+		/// `seal.js` contains the JS glue code for loading the SEAL WASM
+		///
+		/// IMPORTANT: create the `Module` object before including `seal.js`!!!
+		var Module = {
+			//'print':    function(text) { document.getElementById('seal_result').innerHTML += "<br />" + text; },
+			//'printErr': function(text) { document.getElementById('seal_result').innerHTML += "<br />" + text; },
+			onRuntimeInitialized: function () {
+				let seal = this;
+				wasm_mySealTest = function () {
+					mySealTest(seal);
+				}
+			}
+		}
+	</script>
+	<script src="seal.js"></script>
+
+</body>
+
+</html>

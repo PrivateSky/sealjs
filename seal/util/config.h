@@ -16,7 +16,7 @@
 
 /* #undef SEAL_ENFORCE_HE_STD_SECURITY */
 
-#define SEAL_USE_INTRIN
+///////////// #define SEAL_USE_INTRIN
 
 /** After building Microsoft SEAL library: defined on Windows10; undefined on Ubuntu ==> common code: undefined.
  * #undef SEAL_USE__UMUL128

@@ -1,68 +1,77 @@
-# sealjs
-Node.js port of SEAL C++ package released by Microsoft and containing homomorphic encryption primitives
+# seal-wasm-external
+WebAssembly port of SEAL C++ package released by Microsoft and containing homomorphic encryption primitives.
+Generates `seal.js` and `seal.wasm` (the WebAssembly code is stored in a separate file, not as embedded string in .js)
+
+## Prerequisites
+
+### Special for Ubuntu - using [Windows Subsystem for Linux](https://docs.microsoft.com/en-us/windows/wsl/install-win10) :
+- Enable "Windows Subsystem for Linux"
+- Install [Ubuntu on Windows](https://www.microsoft.com/en-us/p/ubuntu/9nblggh4msv6?rtc=1&activetab=pivot%3Aoverviewtab)
+- Install xdg-open
+- Install [wslu](https://github.com/wslutilities/wslu) and config the BROWSER
+```text
+    sudo apt update && sudo apt upgrade
+    sudo apt-get --reinstall xdg-utils
+
+    sudo apt install apt-transport-https
+    wget -O - https://api.patrickwu.space/public.key | sudo apt-key add -
+    echo "deb https://apt.patrickwu.space/ stable main" | sudo tee -a /etc/apt/sources.list 
+
+    sudo apt update
+    sudo apt install wslu
+    export BROWSER='wslview'
+```
+
+
+### EmSDK specific:
+- Get the Emscripten SDK: [here](https://webassembly.org/getting-started/developers-guide/) and [here](https://kripken.github.io/emscripten-site/docs/getting_started/downloads.html)
+- Use `... latest`; also you may try `... sdk-incoming-64bit binaryen-master-64bit`, but sometime it's unstable for WSL (the browser runs on Windows 10, not Ubuntu)
+```text
+    sudo apt update && sudo apt upgrade
+    sudo apt install python2.7 python-pip
+    sudo apt-get install default-jre
+
+    git clone https://github.com/juj/emsdk.git
+    cd emsdk
+    ./emsdk install latest
+    
+    ./emsdk activate latest
+    source ./emsdk_env.sh
+    emcc -v
+```
+
+### Windows specific:
+- Execute `emsdk_env.bat` (instead of `source ./emsdk_env.sh`) and use `emcmdprompt.bat` to open a terminal with EmSDK activated.
 
 ## Building and running
+See `package.json` for the list of available `npm` commands.
+For a manual build (`em++`) or run (`emrun`), inspect the corresponding .bat/.sh files.
+When running in browser, also open its console - to be aware of unexpected errors, if any.
+Benchmarks:
+- Firefox: 10 sec.
+- Chrome:  13 sec.
+- Edge:    37 sec.
+- Android: 96 sec. (Huawei P8 / Chrome)
 
-Compile and build:
+### Ubuntu (build + run web server):
 ```text
-$ npm install
+    /emsdk  $ ./emsdk activate latest
+            $ source ./emsdk_env.sh
+            $ cd ...path/to/sealjs
+    /sealjs $ npm i
+            $ npm run ubuntu
 ```
 
-Then run a JS sample similar to `example_bfv_basics_i()` from [SEAL Examples](https://github.com/Microsoft/SEAL/tree/master/examples) :
+### Windows 10 (build + run web server):
 ```text
-$ npm run demo
+    /emsdk  > emcmdprompt.bat
+            > cd ...path/to/sealjs
+    /sealjs > npm i
+            > npm run windows
 ```
 
-or see our API in action:
+### Run in NodeJS:
 ```text
-$ npm start
+    /sealjs  > node .
+    (or      > node index.js)
 ```
-
-## How to use
-
-```text
-var seal = require('bindings')('nodeseal');
-```
-
-### 1. Create the homomorphic encryption context
-The next statements create 4 contexts having the same encryption parameters (the scheme is 'BFV' by default):
-```text
-var hc1 = seal.generateHomomorficContext();
-var hc2 = new seal.HomomorphicContext();
-var hc3 = new seal.HomomorphicContext(2048, 'coeff_modulus_128', 1<<8);
-var hc4 = new seal.HomomorphicContext( hc3.getEncryptionParameters() );
-```
-
-The three parameters for `hc3` are:
-- `poly_modulus_degree`: Number - one of the values: `1024`, `2048`, `4096`, `8192`, `16384`, or `32768`
-- `coeff_modulus`: String - one of the values: `"coeff_modulus_128"`, `"coeff_modulus_192"`, or `"coeff_modulus_256"`
-- `plain_modulus`: UINT64
-
-### 2. Invoke various methods of a HomomorphicContext object
-GET/SET:
-- `getEncryptionParameters()` //no setter; use HomomorphicContext(parms) instead
-- `getPublicKey()`
-- `setPublicKey()`
-- `getSecretKey()`
-- `setSecretKey()`
-
-INT32 <=> `Ciphertext` converters:
-- `encrypt()`
-- `decrypt()`
-
-Homomorphic arithmetic:
-- `negate()`
-- `add()`
-- `sub()`
-- `multiply()`
-- `square()`
-
-## Notes
-The SEAL's `EncryptionParameters`, `PublicKey`, `SecretKey` and `Ciphertext` objects are serialized to/from the JS environment as Base64 encoded strings.
-
-## Portability
-We adapted the module to build on both Windows 10 and Ubuntu 18.04 LTS (bionic), by adjusting:
-- build parameters - `binding.gyp`
-- SEAL macrodefinitions - `seal/util/config.h`
-
-to a common code; please inspect `config.h` for the list of enabled / disabled SEAL macros.
