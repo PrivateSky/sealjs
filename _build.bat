@@ -10,4 +10,4 @@ em++ --verbose "./seal/batchencoder.cpp" "./seal/biguint.cpp" "./seal/ciphertext
  "./src/base64.cpp" ^
  --bind "./src/homomorphic_context.cpp" -O0 -D _DISABLE_EXTENDED_ALIGNED_STORAGE -I./ -std=c++17 -m64 ^
  -o "./seal.js" ^
- -s WASM=1 -s NO_EXIT_RUNTIME=1 -s ALLOW_MEMORY_GROWTH=1 -s DISABLE_EXCEPTION_CATCHING=0
+ -s WASM=1 -s NO_EXIT_RUNTIME=1 -s ALLOW_MEMORY_GROWTH=1 -s DISABLE_EXCEPTION_CATCHING=0 -s SINGLE_FILE=1

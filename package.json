@@ -1,6 +1,6 @@
 {
-  "name": "seal-wasm-external",
-  "description": "WebAssembly port of Microsoft SEAL library using EmSDK. The build generates separate seal.js and seal.wasm files.",
+  "name": "seal-wasm-embedded",
+  "description": "WebAssembly port of Microsoft SEAL library using EmSDK. The build generates seal.js with WASM embedded as base64 encoded string",
   "version": "1.0.0",
   "main": "index.js",
   "author": "Ciprian Sava",

@@ -1,6 +1,6 @@
-# seal-wasm-external
+# seal-wasm-embedded
 WebAssembly port of SEAL C++ package released by Microsoft and containing homomorphic encryption primitives.
-Generates `seal.js` and `seal.wasm` (the WebAssembly code is stored in a separate file, not as embedded string in .js)
+Generates `seal.js` only (the WebAssembly code is stored as a Base64 encoded string embedded in this .js)
 
 ## Prerequisites
 
@@ -75,3 +75,6 @@ Benchmarks:
     /sealjs  > node .
     (or      > node index.js)
 ```
+
+### Run directly in browser:
+You may open `index.html` in your browser without starting the web server (e.g. `file:///D:/seal-wasm-embedded/index.html`)
